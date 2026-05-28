@@ -35,6 +35,8 @@ ENV/
 
 # Environment variables
 .env
+data/mcp-secrets.json
+com.shutong.horizon-daily.plist
 
 # Data files (keep structure, ignore content)
 data/seen.json

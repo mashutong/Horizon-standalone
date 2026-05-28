@@ -2,7 +2,7 @@ name: Daily Horizon Summary
 
 on:
   schedule:
-    - cron: '0 0 */2 * *'  # Runs every 2 days at 00:00 UTC
+    - cron: '17 23 * * *'  # Daily at 23:17 UTC (07:17 Beijing), off-peak to avoid scheduling delays
   workflow_dispatch:      # Allow manual trigger
 
 jobs:
@@ -30,7 +30,7 @@ jobs:
         env:
           # Map secrets to environment variables expected by config.json
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-        run: uv run horizon --hours 48
+        run: uv run horizon --hours 26
 
       - name: Set current date as environment variable
         run: echo "DATE=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
