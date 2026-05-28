@@ -75,6 +75,21 @@ class HorizonOrchestrator:
             # 4. Analyze with AI
             analyzed_items = await self._analyze_content(merged_items)
             self.console.print(f"🤖 Analyzed {len(analyzed_items)} items with AI\n")
+            failed_analysis = [
+                item for item in analyzed_items
+                if item.metadata.get("analysis_error")
+            ]
+            if analyzed_items and len(failed_analysis) == len(analyzed_items):
+                sample_error = failed_analysis[0].metadata.get("analysis_error")
+                raise RuntimeError(
+                    "AI analysis failed for all fetched items; refusing to publish an empty summary. "
+                    f"First error: {sample_error}"
+                )
+            if failed_analysis:
+                self.console.print(
+                    f"[yellow]⚠️  AI analysis failed for {len(failed_analysis)}/"
+                    f"{len(analyzed_items)} items[/yellow]\n"
+                )
 
             # 5. Filter by score threshold
             threshold = self.config.filtering.ai_score_threshold

@@ -99,6 +99,7 @@ class ContentAnalyzer:
                         item.ai_score = 0.0
                         item.ai_reason = "Analysis failed"
                         item.ai_summary = item.title
+                        item.metadata["analysis_error"] = f"{type(e).__name__}: {e}"
                         analyzed_items.append(item)
                     progress.advance(task)
 
@@ -183,6 +184,7 @@ class ContentAnalyzer:
             item.ai_reason = "Analysis response parse failed"
             item.ai_summary = item.title
             item.ai_tags = []
+            item.metadata["analysis_error"] = "Analysis response parse failed"
             return
 
         # Update item with analysis results
@@ -190,3 +192,4 @@ class ContentAnalyzer:
         item.ai_reason = result.get("reason", "")
         item.ai_summary = result.get("summary", item.title)
         item.ai_tags = result.get("tags", [])
+        item.metadata.pop("analysis_error", None)
