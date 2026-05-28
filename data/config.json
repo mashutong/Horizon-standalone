@@ -80,6 +80,10 @@
       "users": [],
       "fetch_comments": 10
     },
+    "telegram": {
+      "enabled": false,
+      "channels": []
+    },
     "ossinsight": {
       "enabled": true,
       "period": "past_24_hours",
