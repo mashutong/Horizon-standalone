@@ -5,120 +5,82 @@ date: 2026-05-28
 lang: zh
 ---
 
-> From 7 items, 5 important content pieces were selected
+> From 4 items, 3 important content pieces were selected
 
 ---
 
-1. [YouTube 将自动标注 AI 生成视频](#item-1) ⭐️ 8.0/10
-2. [Anthropic 和 OpenAI 找到了产品市场契合点](#item-2) ⭐️ 8.0/10
-3. [SQLite 新增 AGENTS.md 拒绝 AI 生成代码](#item-3) ⭐️ 8.0/10
-4. [AI 带来的生产力提升是否该让我们多休息一天？](#item-4) ⭐️ 7.0/10
-5. [《模拟城市 3000》4K 画质：怀旧与技术的碰撞](#item-5) ⭐️ 7.0/10
+1. [Anthropic 发布 Claude Opus 4.8，预告 Mythos 模型](#item-1) ⭐️ 8.0/10
+2. [SQLite 添加 AGENTS.md 拒绝 AI 代理贡献](#item-2) ⭐️ 8.0/10
+3. [仅用 Postgres 实现持久化工作流？](#item-3) ⭐️ 7.0/10
 
 ---
 
 <a id="item-1"></a>
-## [YouTube 将自动标注 AI 生成视频](https://blog.youtube/news-and-events/improving-ai-labels-viewers-creators/) ⭐️ 8.0/10
+## [Anthropic 发布 Claude Opus 4.8，预告 Mythos 模型](https://www.anthropic.com/news/claude-opus-4-8) ⭐️ 8.0/10
 
-YouTube 宣布将自动标注使用显著逼真 AI 技术的视频，从依赖创作者自愿披露转向对此类内容强制添加显眼标签。 该政策是打击虚假信息、提升平台透明度的重要举措，直接应对可能误导观众的合成媒体日益增多的问题。 自动标签仅适用于逼真 AI 视频；动画、非写实或仅少量 AI 修改的内容可能不会被标记。标签将永久且显眼地显示。
+Anthropic 发布了 Claude Opus 4.8，相比前代有适度提升，并宣布了 Project Glasswing 项目，在该项目下，少数组织正在使用更强大的 Claude Mythos Preview 进行网络安全工作。 此次发布延续了 Anthropic 对其前沿模型的渐进式改进，而 Mythos Preview 则预示着能力的重大飞跃，可能重塑 AI 辅助的网络安全领域，但需要更强的安全措施才能全面发布。 用户现在可以在 Web 界面中关闭自适应思考功能，解决了思考未触发导致输出质量不佳的问题。Mythos 模型是 Project Glasswing 的一部分，该计划旨在通过大规模主动识别和修复漏洞来保护关键开源软件。
 
-hackernews · nopg · May 27, 20:00
+hackernews · craigmart · May 28, 16:49
 
-**背景**: 包括深度伪造和 AI 生成视频在内的合成媒体引发了虚假信息担忧。此前，YouTube 依赖创作者自行披露 AI 使用情况，但这往往不够充分。自动检测工具通过分析视频内容中的 AI 生成痕迹（如 GAN 指纹或频谱异常）来识别。
+**背景**: Anthropic 的 Claude 系列包括 Sonnet 和 Opus 等模型，版本号如 4.5、4.6 等。Project Glasswing 是 Anthropic 的一项计划，通过与负责基础设施的组织合作，为 AI 时代保护关键软件。Mythos 模型是比 Opus 智能更高的新前沿模型，但其发布需要更强的网络安全保障。
 
 <details><summary>参考链接</summary>
 <ul>
-<li><a href="https://techcrunch.com/2026/05/27/youtube-will-now-automatically-label-ai-videos/">YouTube will now automatically label AI videos | TechCrunch</a></li>
-<li><a href="https://arstechnica.com/google/2026/05/youtube-to-begin-automatically-labeling-ai-videos/">YouTube to begin automatically labeling AI videos - Ars Technica</a></li>
-<li><a href="https://ftw.usatoday.com/story/tech/2026/05/27/youtube-automatic-ai-labels-video-algorithm-impact/90279067007/">YouTube to auto-label AI videos: What creators need to know in 2026</a></li>
+<li><a href="https://www.anthropic.com/glasswing">Project Glasswing: Securing critical software for the AI era</a></li>
+<li><a href="https://www.bbc.com/news/articles/crk1py1jgzko">What is Anthopic's Claude Mythos and what risks does it pose?</a></li>
 
 </ul>
 </details>
 
-**社区讨论**: 评论者普遍支持此举，并提到曾遭遇误导性 AI 新闻视频和 AI 生成音乐。部分人质疑对于部分使用 AI（如 AI 素材片段或背景音乐）的情况，界限将如何划定。
+**社区讨论**: 社区评论指出，这是 Anthropic 前沿模型首次连续三次小版本升级（4.6、4.7、4.8），提升幅度有限，一些用户对能够关闭自适应思考功能表示赞赏。其他人则对 Mythos 预览版感到兴奋，但也承认其潜在风险令人担忧。
 
-**标签**: `#AI`, `#content moderation`, `#YouTube`, `#misinformation`, `#synthetic media`
+**标签**: `#AI`, `#Anthropic`, `#Claude`, `#frontier models`, `#cybersecurity`
 
 ---
 
 <a id="item-2"></a>
-## [Anthropic 和 OpenAI 找到了产品市场契合点](https://simonwillison.net/2026/May/27/product-market-fit/#atom-everything) ⭐️ 8.0/10
+## [SQLite 添加 AGENTS.md 拒绝 AI 代理贡献](https://simonwillison.net/2026/May/27/sqlite-agents/#atom-everything) ⭐️ 8.0/10
 
-Simon Willison 认为 Anthropic 和 OpenAI 已经实现了产品市场契合，理由是企业 API 支出增加以及 Anthropic 即将迎来首个盈利季度的传闻。他指出，两家公司已将企业定价转为基于 API 的模式，导致重度用户账单意外高昂。 这标志着 AI 行业的一个重要里程碑，LLM 公司从炒作转向可持续收入，可能重塑企业软件支出。同时也引发了关于 AI 工具对企业经济可行性和实际投资回报率的质疑。 Willison 计算，他个人使用 Claude Code 和 OpenAI Codex 在 30 天内需支付 2180.16 美元的 API 令牌费用，而他实际订阅费仅 200 美元。但企业客户现在需在座位费之外按 API 用量付费，导致账单意外高昂。
+SQLite 添加了 AGENTS.md 文件，明确了其对 AI 代理贡献的政策，明确表示不接受代理生成的代码，但接受包含可复现测试用例的代理错误报告和文档补丁。最近一次提交删除了“currently”一词，以强化不接受代理代码的声明。 这是主要开源项目首次明确制定关于 AI 代理贡献的政策，为项目如何管理 AI 生成的代码和错误报告的涌入树立了先例。它凸显了在自主编码代理时代维护代码质量和项目治理的日益严峻挑战。 AGENTS.md 文件于五天前添加，最近一次提交从“SQLite does not (currently) accept agentic code”中删除了“(currently)”，以强化立场。此外，SQLite 论坛被 AI 生成的错误报告淹没，导致创建了单独的 SQLite Bug Forum。
 
-rss · Simon Willison · May 27, 16:38
+rss · Simon Willison · May 27, 23:44
 
-**背景**: 产品市场契合度（PMF）描述产品满足市场强烈需求的程度。对于 Anthropic 和 OpenAI 等 AI 实验室，实现 PMF 意味着企业愿意为 LLM 驱动的工具（尤其是编码代理）支付高额费用。然而，训练和推理的高成本引发了对长期盈利能力的疑问。
+**背景**: AGENTS.md 是一种简单的开放格式，用于指导 AI 编码代理，已被超过 60,000 个开源项目用作提供上下文和说明的专用位置。代理编码是一种软件开发方法，自主 AI 代理在最少人工干预下规划、编写、测试和修改代码，这可能会引入与项目标准冲突的设计决策。
 
 <details><summary>参考链接</summary>
 <ul>
-<li><a href="https://www.getmaxim.ai/articles/top-5-enterprise-gateways-for-llm-cost-tracking-and-budget-controls/">Top 5 Enterprise Gateways for LLM Cost Tracking and Budget Controls</a></li>
+<li><a href="https://agents.md/">AGENTS.md</a></li>
+<li><a href="https://cloud.google.com/discover/what-is-agentic-coding">What is agentic coding? How it works and use cases | Google Cloud</a></li>
+<li><a href="https://github.com/agentsmd/agents.md">GitHub - agentsmd/agents.md: AGENTS.md — a simple, open format for guiding coding agents</a></li>
 
 </ul>
 </details>
 
-**社区讨论**: 评论者意见不一：有人质疑 LLM 是否真正创造了超越加速的新价值，也有人争论所需支出规模以及开源模型的威胁。一个关键担忧是企业投资回报率是否足以证明巨大的令牌消耗是合理的。
+**社区讨论**: Datasette Discord 上的社区讨论强调此举是一个值得注意的发展，Alex Garcia 分享了这一消息。总体情绪似乎支持 SQLite 在管理 AI 生成贡献方面的积极立场。
 
-**标签**: `#AI`, `#LLMs`, `#product-market fit`, `#economics`, `#Anthropic`
+**标签**: `#AI agents`, `#open source governance`, `#SQLite`, `#software engineering`
 
 ---
 
 <a id="item-3"></a>
-## [SQLite 新增 AGENTS.md 拒绝 AI 生成代码](https://simonwillison.net/2026/May/27/sqlite-agents/#atom-everything) ⭐️ 8.0/10
+## [仅用 Postgres 实现持久化工作流？](https://www.dbos.dev/blog/postgres-is-all-you-need-for-durable-execution) ⭐️ 7.0/10
 
-SQLite 在其仓库中新增了 AGENTS.md 文件，明确声明不接受代理（AI 生成）代码，但欢迎错误报告和文档补丁。该项目还创建了一个独立的 Bug 论坛来处理大量 AI 生成的错误报告。 该政策为应对低质量 AI 贡献的开源项目树立了明确先例，保护维护者免于审查过载。同时凸显了 AI 辅助开发与传统开源治理之间日益增长的张力。 AGENTS.md 文件指出 SQLite 不接受代理代码，但接受包含可重现测试用例的代理错误报告和文档补丁。最近的一次提交删除了声明中的“(currently)”一词以强化该政策。
+一篇博文认为仅使用 Postgres 就足以实现持久化工作流执行，并比较了 DBOS、River 和 Absurd 等实现。 这一讨论凸显了通过利用 Postgres 简化持久化工作流架构的趋势，可能降低运维复杂性和成本。 DBOS 依赖付费组件 Conductor 进行扩展和恢复，而 River 缺乏内置的死信队列支持，该功能需付费。
 
-rss · Simon Willison · May 27, 23:44
+hackernews · KraftyOne · May 28, 18:41
 
-**背景**: SQLite 是一个广泛使用的嵌入式数据库引擎。“代理代码”指由 AI 代理在极少人工干预下生成的代码。该项目历来要求贡献附带法律文件以确保公共领域状态，新政策将其扩展为明确排除 AI 生成代码。
+**背景**: 持久化工作流执行通过持久化状态确保长时间运行的过程在崩溃和重启后仍能继续。传统上使用 Temporal 等专用工作流引擎，但有人认为 Postgres 可以同时作为数据库和编排层。
 
 <details><summary>参考链接</summary>
 <ul>
-<li><a href="https://simonwillison.net/2026/May/27/sqlite-agents/">sqlite AGENTS.md</a></li>
-<li><a href="https://github.com/sqlite/sqlite/blob/master/AGENTS.md">sqlite/AGENTS.md at master - GitHub</a></li>
+<li><a href="https://www.dbos.dev/blog/postgres-is-all-you-need-for-durable-execution">Postgres-backed Durable Workflow Execution | DBOS</a></li>
+<li><a href="https://github.com/pgflow-dev/pgflow">GitHub - pgflow-dev/pgflow: Postgres-centric workflow engine with deep integration with Supabase · GitHub</a></li>
 
 </ul>
 </details>
 
-**标签**: `#SQLite`, `#AI agents`, `#open source`, `#software engineering`, `#policy`
+**社区讨论**: 评论者指出 DBOS 依赖付费组件进行扩展是一个缺点，而 River 缺乏免费的死信队列支持是限制。其他人分享了替代实现并与 Temporal 的使用体验进行了比较。
 
----
-
-<a id="item-4"></a>
-## [AI 带来的生产力提升是否该让我们多休息一天？](https://mlsu.io/posts/day-off/) ⭐️ 7.0/10
-
-一篇广受欢迎的博客文章以幽默的方式提出，AI 带来的生产力提升应转化为员工工作时间的减少，而不仅仅是雇主利润的增加，在 Hacker News 上引发了高参与度的讨论。 这场讨论挑战了 AI 仅惠及雇主和股东的主流叙事，提出了一个关于 AI 时代生产力收益应如何分配的及时问题。 该帖子在 Hacker News 上获得了 427 个点赞和 260 条评论，评论者将其与历史上的生产力承诺相类比，并将四天工作制分析为一种囚徒困境。
-
-hackernews · mlsu · May 28, 00:40
-
-**背景**: 几十年来，技术进步一直承诺减少工作时间，但平均工作时间并未显著减少。这篇文章触及了关于 AI 对劳动力、生产力和工作文化影响的持续辩论，质疑效率提升的收益由谁获得。
-
-**社区讨论**: 评论者分享了历史轶事，例如一位股票经纪人的经历——电脑并未减少工作时间，并将四天工作制分析为一种囚徒困境，其中背叛者会获得优势。一些人引用了凯恩斯 1930 年关于 15 小时工作周的预测，指出这一预测并未实现。
-
-**标签**: `#AI`, `#productivity`, `#work culture`, `#four-day work week`, `#economics`
-
----
-
-<a id="item-5"></a>
-## [《模拟城市 3000》4K 画质：怀旧与技术的碰撞](https://www.thran.uk/writ/hdid/2025/12/simcity-3k-in-4k.html) ⭐️ 7.0/10
-
-一篇技术文章探讨了通过 HD 补丁以 4K 分辨率运行《模拟城市 3000》，同时社区讨论了现代城市建造游戏中想象元素的缺失。 这一讨论突显了日益增长的观点：现代城市建造游戏过于追求照片级真实感，而忽视了定义该类型经典作品的、由玩家驱动的想象力模拟，这可能会影响未来的游戏设计。 《模拟城市 3000：无限版》的 HD 补丁支持高达 4K 的分辨率，但可能不稳定，尤其是分辨率不能被 8 整除时。文章还指出，游戏的美术来自 3DS Max 渲染，而非逐像素绘制。
-
-hackernews · speckx · May 27, 17:36
-
-**背景**: 《模拟城市 3000》于 1999 年发布，是一款经典的城市建造模拟游戏，以其迷人的等距美术和引人入胜的顾问系统而闻名。现代城市建造游戏如《城市：天际线》注重逼真的图形和复杂的模拟，但一些玩家认为这牺牲了老游戏所鼓励的想象力“空想性错视”。
-
-<details><summary>参考链接</summary>
-<ul>
-<li><a href="https://tetration.github.io/Simcity3000_Modding_Revival/scu3HD_patch.html">SimCity 3000 Revival Project: HD patch</a></li>
-<li><a href="https://github.com/tetration/Simcity3000-HD-patch">GitHub - tetration/Simcity3000-HD-patch: Python 3 & 2.7 scripts that patch Simcity 3000 to run in HD resolutions such as 1920x1080 and 4k · GitHub</a></li>
-<li><a href="https://www.eneba.com/hub/games/best-city-building-games/">21 Best City-Building Games for Creatives and Planners in 2026</a></li>
-
-</ul>
-</details>
-
-**社区讨论**: 评论者表达了对《模拟城市 3000》温暖顾问系统和音乐的怀旧之情，并批评现代城市建造游戏失去了想象的火花。一位用户指出游戏美术来自 3DS Max 渲染而非像素艺术，另一位则分享了一个关于顾问的幽默链接。
-
-**标签**: `#retro gaming`, `#game design`, `#simcity`, `#technical deep-dive`, `#nostalgia`
+**标签**: `#durable workflows`, `#postgres`, `#distributed systems`, `#software engineering`
 
 ---
