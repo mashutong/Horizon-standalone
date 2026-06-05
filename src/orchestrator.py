@@ -4,6 +4,7 @@ import asyncio
 import re
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from typing import List, Dict
 from urllib.parse import urlparse
 import httpx
@@ -125,7 +126,10 @@ class HorizonOrchestrator:
             await self._enrich_important_items(important_items)
 
             # 7. Generate and save daily summaries for each configured language
-            today = datetime.utcnow().strftime("%Y-%m-%d")
+            # Use Beijing time so the report is dated by the day the user reads it
+            # (the scheduled run lands ~07:00 Beijing). Computing in UTC here let runs
+            # that crossed UTC midnight roll the date forward and collide/skip a day.
+            today = datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y-%m-%d")
             for lang in self.config.ai.languages:
                 summary = await self._generate_summary(important_items, today, len(all_items), language=lang)
 
