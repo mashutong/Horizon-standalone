@@ -1,7 +1,6 @@
 """Main orchestrator coordinating the entire workflow."""
 
 import asyncio
-import re
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -12,16 +11,21 @@ from rich.console import Console
 
 from .models import Config, ContentItem
 from .storage.manager import StorageManager
-from .services.emailer import EmailManager
+from .services.email import EmailManager
+from .services.webhook import WebhookNotifier
 from .scrapers.github import GitHubScraper
 from .scrapers.hackernews import HackerNewsScraper
 from .scrapers.rss import RSSScraper
 from .scrapers.reddit import RedditScraper
 from .scrapers.telegram import TelegramScraper
+from .scrapers.twitter import TwitterScraper
+from .scrapers.openbb import OpenBBScraper
+from .scrapers.ossinsight import OSSInsightScraper
 from .ai.client import create_ai_client
 from .ai.analyzer import ContentAnalyzer
 from .ai.summarizer import DailySummarizer
 from .ai.enricher import ContentEnricher
+from .ai.tokens import get_usage_snapshot
 
 
 class HorizonOrchestrator:
@@ -38,6 +42,11 @@ class HorizonOrchestrator:
         self.storage = storage
         self.console = Console()
         self.email_manager = EmailManager(config.email, console=self.console) if config.email else None
+        self.webhook_notifier = (
+            WebhookNotifier(config.webhook, console=self.console)
+            if config.webhook and config.webhook.enabled
+            else None
+        )
 
     async def run(self, force_hours: int = None) -> None:
         """Execute the complete workflow.
@@ -48,7 +57,12 @@ class HorizonOrchestrator:
         self.console.print("[bold cyan]🌅 Horizon - Starting aggregation...[/bold cyan]\n")
 
         # Check email subscriptions if configured
-        if self.email_manager and self.config.email and self.config.email.enabled:
+        if (
+            self.email_manager
+            and self.config.email
+            and self.config.email.enabled
+            and self.config.email.imap_enabled
+        ):
             self.console.print("📧 Checking for new email subscriptions...")
             self.email_manager.check_subscriptions(self.storage)
 
@@ -105,13 +119,16 @@ class HorizonOrchestrator:
             )
 
             # 5.5 Semantic deduplication: drop items covering the same topic
-            deduped_items = self.merge_topic_duplicates(important_items)
+            deduped_items = await self.merge_topic_duplicates(important_items)
             if len(deduped_items) < len(important_items):
                 self.console.print(
                     f"🧹 Removed {len(important_items) - len(deduped_items)} topic duplicates "
                     f"→ {len(deduped_items)} unique items\n"
                 )
             important_items = deduped_items
+
+            # 5.6 Optional second-stage Twitter reply expansion + targeted re-analysis
+            await self._expand_twitter_discussion(important_items)
 
             # Show per-sub-source selection breakdown
             selected_counts: Dict[str, int] = defaultdict(int)
@@ -131,7 +148,8 @@ class HorizonOrchestrator:
             # that crossed UTC midnight roll the date forward and collide/skip a day.
             today = datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y-%m-%d")
             for lang in self.config.ai.languages:
-                summary = await self._generate_summary(important_items, today, len(all_items), language=lang)
+                summarizer = DailySummarizer()
+                summary = await summarizer.generate_summary(important_items, today, len(all_items), language=lang)
 
                 # Save to data/summaries/
                 summary_path = self.storage.save_daily_summary(today, summary, language=lang)
@@ -185,10 +203,43 @@ class HorizonOrchestrator:
                     subject = f"Horizon Summary ({lang.upper()}) - {today}"
                     self.email_manager.send_daily_summary(summary, subject, subscribers)
 
+                # Send webhook notification if configured
+                if self.webhook_notifier:
+                    await self.webhook_notifier.send_daily_summary(
+                        summary=summary,
+                        important_items=important_items,
+                        all_items_count=len(all_items),
+                        date=today,
+                        lang=lang,
+                        summarizer=summarizer,
+                    )
+
             self.console.print("[bold green]✅ Horizon completed successfully![/bold green]")
+            usage = get_usage_snapshot()
+            if usage.total_tokens > 0:
+                self.console.print(
+                    f"\n🧮 Token usage this run: "
+                    f"{usage.total_tokens} tokens "
+                    f"(input: {usage.total_input_tokens}, output: {usage.total_output_tokens})"
+                )
+                for provider, u in sorted(usage.per_provider.items()):
+                    if u.total <= 0:
+                        continue
+                    self.console.print(
+                        f"   • {provider}: {u.total} tokens "
+                        f"(in: {u.input_tokens}, out: {u.output_tokens})"
+                    )
 
         except Exception as e:
             self.console.print(f"[bold red]❌ Error: {e}[/bold red]")
+
+            # Send webhook failure notification if configured
+            if self.webhook_notifier:
+                await self.webhook_notifier.send_failure(
+                    date=datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+                    error_message=str(e),
+                )
+
             raise
 
     def _determine_time_window(self, force_hours: int = None) -> datetime:
@@ -238,6 +289,21 @@ class HorizonOrchestrator:
                 telegram_scraper = TelegramScraper(self.config.sources.telegram, client)
                 tasks.append(self._fetch_with_progress("Telegram", telegram_scraper, since))
 
+            # Twitter
+            if self.config.sources.twitter and self.config.sources.twitter.enabled:
+                twitter_scraper = TwitterScraper(self.config.sources.twitter, client)
+                tasks.append(self._fetch_with_progress("Twitter", twitter_scraper, since))
+
+            # OpenBB (financial news / filings via the OpenBB Platform SDK)
+            if self.config.sources.openbb and self.config.sources.openbb.enabled:
+                openbb_scraper = OpenBBScraper(self.config.sources.openbb, client)
+                tasks.append(self._fetch_with_progress("OpenBB", openbb_scraper, since))
+
+            # OSS Insight trending repos
+            if self.config.sources.ossinsight and self.config.sources.ossinsight.enabled:
+                oss_scraper = OSSInsightScraper(self.config.sources.ossinsight, client)
+                tasks.append(self._fetch_with_progress("OSS Insight", oss_scraper, since))
+
             # Fetch all concurrently
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -286,8 +352,12 @@ class HorizonOrchestrator:
             return meta["feed_name"]
         if meta.get("channel"):
             return f"@{meta['channel']}"
+        if meta.get("period") and meta.get("repo"):
+            return f"ossinsight:{meta.get('primary_language', 'all')}"
         if meta.get("repo"):
             return meta["repo"]
+        if meta.get("watchlist"):
+            return meta["watchlist"]
         return item.author or "unknown"
 
     def merge_cross_source_duplicates(self, items: List[ContentItem]) -> List[ContentItem]:
@@ -346,63 +416,128 @@ class HorizonOrchestrator:
 
         return merged
 
-    @staticmethod
-    def _title_tokens(title: str) -> set:
-        tokens = set()
-        for w in re.findall(r'[a-zA-Z]{3,}', title):
-            tokens.add(w.lower())
-        cjk = re.sub(r'[^\u4e00-\u9fff]', '', title)
-        for i in range(len(cjk) - 1):
-            tokens.add(cjk[i:i + 2])
-        return tokens
-
-    @staticmethod
-    def _merge_item_content(primary: ContentItem, secondary: ContentItem) -> None:
-        """Append secondary's scraped content (comments) into primary."""
-        if not secondary.content:
-            return
-        if secondary.content in (primary.content or ""):
-            return
-        label = secondary.source_type.value
-        primary.content = (primary.content or "") + f"\n\n--- From {label} ---\n{secondary.content}"
-
-    def merge_topic_duplicates(
-        self, items: List[ContentItem], threshold: float = 0.33
-    ) -> List[ContentItem]:
-        """Merge items covering the same topic into the highest-scored one.
+    async def merge_topic_duplicates(self, items: List[ContentItem]) -> List[ContentItem]:
+        """Merge items covering the same topic using AI semantic deduplication.
 
         This is a stable stage helper for integrations such as MCP.
 
-        Two items are considered duplicates when either:
-          - Title token Jaccard >= threshold, or
-          - They share >= 2 ai_tags AND title Jaccard >= 0.15
-
-        Items must already be sorted by ai_score descending.
+        Sends all item titles, tags, and summaries to AI in a single call.
+        Items must already be sorted by ai_score descending so that the first
+        item in each duplicate group is always the highest-scored one.
         Content (comments) from duplicate items is merged into the primary.
+
+        Falls back to returning items unchanged if the AI call fails.
         """
-        kept: List[ContentItem] = []
-        for item in items:
-            tokens = self._title_tokens(item.title)
-            item_tags = set(item.ai_tags or [])
-            merged_into = None
-            for accepted in kept:
-                a_tokens = self._title_tokens(accepted.title)
-                union = a_tokens | tokens
-                title_sim = len(a_tokens & tokens) / len(union) if union else 0.0
-                tag_overlap = len(set(accepted.ai_tags or []) & item_tags)
-                if title_sim >= threshold or (tag_overlap >= 2 and title_sim >= 0.15):
-                    merged_into = accepted
+        if len(items) <= 1:
+            return items
+
+        from .ai.prompts import TOPIC_DEDUP_SYSTEM, TOPIC_DEDUP_USER
+        from .ai.utils import parse_json_response
+
+        # Build the item list for the prompt
+        lines = []
+        for i, item in enumerate(items):
+            tags = ", ".join(item.ai_tags) if item.ai_tags else "—"
+            summary = item.ai_summary or "—"
+            lines.append(f"[{i}] {item.title}\n    Tags: {tags}\n    Summary: {summary}")
+        items_text = "\n\n".join(lines)
+
+        try:
+            ai_client = create_ai_client(self.config.ai)
+            response = await ai_client.complete(
+                system=TOPIC_DEDUP_SYSTEM,
+                user=TOPIC_DEDUP_USER.format(items=items_text),
+            )
+            result = parse_json_response(response)
+            if result is None:
+                self.console.print("[yellow]  dedup: could not parse AI response, skipping[/yellow]")
+                return items
+
+            duplicate_groups = result.get("duplicates", [])
+        except Exception as e:
+            self.console.print(f"[yellow]  dedup: AI call failed ({e}), skipping[/yellow]")
+            return items
+
+        if not duplicate_groups:
+            return items
+
+        # Build a set of indices to drop (all non-primary duplicates)
+        drop_indices: set[int] = set()
+        for group in duplicate_groups:
+            if not isinstance(group, list) or len(group) < 2:
+                continue
+            primary_idx = group[0]
+            if primary_idx < 0 or primary_idx >= len(items):
+                continue
+            primary = items[primary_idx]
+            for dup_idx in group[1:]:
+                if not isinstance(dup_idx, int) or dup_idx < 0 or dup_idx >= len(items):
+                    continue
+                if dup_idx == primary_idx:
+                    continue
+                dup = items[dup_idx]
+                # Merge comments/content from the duplicate into the primary
+                if dup.content:
+                    if not primary.content or dup.content not in primary.content:
+                        label = dup.source_type.value
+                        primary.content = (primary.content or "") + f"\n\n--- From {label} ---\n{dup.content}"
+                self.console.print(
+                    f"   [dim]dedup: keep [{primary_idx}] {primary.title}[/dim]\n"
+                    f"   [dim]       drop [{dup_idx}] {dup.title}[/dim]"
+                )
+                drop_indices.add(dup_idx)
+
+        return [item for i, item in enumerate(items) if i not in drop_indices]
+
+    async def _expand_twitter_discussion(self, items: List[ContentItem]) -> None:
+        """Second-stage: fetch reply text for important Twitter items and re-analyze.
+
+        Only runs when sources.twitter.fetch_reply_text is True.
+        Bounded by max_tweets_to_expand to control cost.
+        """
+        tw_cfg = self.config.sources.twitter
+        if not tw_cfg or not tw_cfg.enabled or not tw_cfg.fetch_reply_text:
+            return
+
+        from .models import SourceType
+
+        twitter_items = [
+            item for item in items
+            if item.source_type == SourceType.TWITTER
+        ][:tw_cfg.max_tweets_to_expand]
+
+        if not twitter_items:
+            return
+
+        self.console.print(
+            f"💬 Fetching reply text for {len(twitter_items)} Twitter items..."
+        )
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            scraper = TwitterScraper(tw_cfg, client)
+            expanded = []
+            for item in twitter_items:
+                try:
+                    reply_lines = await scraper.fetch_replies_for_item(item)
+                    if TwitterScraper.append_discussion_content(item, reply_lines):
+                        expanded.append(item)
+                        self.console.print(
+                            f"   💬 {len(reply_lines)} replies added to: {item.title[:60]}"
+                        )
+                except Exception as exc:
                     self.console.print(
-                        f"   [dim]dedup: title_sim={title_sim:.2f} tag_overlap={tag_overlap}[/dim]\n"
-                        f"   [dim]  keep : {accepted.title}[/dim]\n"
-                        f"   [dim]  merge: {item.title}[/dim]"
+                        f"   [yellow]⚠️  Reply fetch failed for {item.id}: {exc}[/yellow]"
                     )
-                    break
-            if merged_into is not None:
-                self._merge_item_content(merged_into, item)
-            else:
-                kept.append(item)
-        return kept
+
+        if not expanded:
+            return
+
+        self.console.print(
+            f"   Re-analyzing {len(expanded)} Twitter items with reply context...\n"
+        )
+        ai_client = create_ai_client(self.config.ai)
+        analyzer = ContentAnalyzer(ai_client)
+        await analyzer.analyze_batch(expanded)
 
     async def _enrich_important_items(self, items: List[ContentItem]) -> None:
         """Enrich items with background knowledge (2nd AI pass).

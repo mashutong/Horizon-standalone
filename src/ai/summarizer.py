@@ -25,6 +25,8 @@ LABELS = {
         "discussion": "Discussion",
         "references": "References",
         "tags": "Tags",
+        "selected_items": "From {total} items, {selected} important content pieces were selected",
+        "empty_analyzed": "Analyzed {total} items, but none met the importance threshold.",
         "empty_body": (
             "No significant developments today. This might indicate:\n"
             "- A quiet day in your tracked sources\n"
@@ -43,6 +45,8 @@ LABELS = {
         "discussion": "社区讨论",
         "references": "参考链接",
         "tags": "标签",
+        "selected_items": "从 {total} 条内容中筛选出 {selected} 条重要资讯。",
+        "empty_analyzed": "已分析 {total} 条内容，但没有达到重要性阈值的条目。",
         "empty_body": (
             "今日暂无重要动态，可能原因：\n"
             "- 今天关注的信息源较平静\n"
@@ -90,14 +94,15 @@ class DailySummarizer:
 
         header = (
             f"# {labels['header']} - {date}\n\n"
-            f"> From {total_fetched} items, {len(items)} important content pieces were selected\n\n"
+            f"> {labels['selected_items'].format(total=total_fetched, selected=len(items))}\n\n"
             "---\n\n"
         )
 
         # TOC
         toc_entries = []
         for i, item in enumerate(items):
-            t = (item.metadata.get(f"title_{language}") or item.title).replace("[", "(").replace("]", ")")
+            _t = item.metadata.get(f"title_{language}") or item.title
+            t = str(_t).replace("[", "(").replace("]", ")")
             if language == "zh":
                 t = _pangu(t)
             score = item.ai_score or "?"
@@ -108,12 +113,57 @@ class DailySummarizer:
 
         return header + toc + "".join(parts)
 
+    def generate_webhook_overview(
+        self,
+        items: List[ContentItem],
+        date: str,
+        total_fetched: int,
+        language: str = "en",
+    ) -> str:
+        """Generate a compact overview for multi-message webhook delivery."""
+        labels = LABELS.get(language, LABELS["en"])
+        if not items:
+            return self._generate_empty_summary(date, total_fetched, labels)
+
+        if language == "zh":
+            header = (
+                f"# {labels['header']} - {date}\n\n"
+                f"> 从 {total_fetched} 条内容中筛选出 {len(items)} 条重要资讯。\n\n"
+                "下面会按新闻逐条发送详情，你可以只看感兴趣的标题。\n\n"
+            )
+        else:
+            header = (
+                f"# {labels['header']} - {date}\n\n"
+                f"> Selected {len(items)} important items from {total_fetched} fetched items.\n\n"
+                "Details will be sent item by item so you can read only the topics you care about.\n\n"
+            )
+
+        entries = []
+        for i, item in enumerate(items, start=1):
+            title = str(item.metadata.get(f"title_{language}") or item.title).replace("[", "(").replace("]", ")")
+            if language == "zh":
+                title = _pangu(title)
+            score = item.ai_score or "?"
+            entries.append(f"{i}. [{title}]({item.url}) \u2b50\ufe0f {score}/10")
+
+        return header + "\n".join(entries)
+
+    def generate_webhook_item(
+        self,
+        item: ContentItem,
+        language: str,
+        index: int,
+        total: int,
+    ) -> str:
+        """Generate one item message for multi-message webhook delivery."""
+        labels = LABELS.get(language, LABELS["en"])
+        prefix = f"第 {index}/{total} 条\n\n" if language == "zh" else f"Item {index}/{total}\n\n"
+        return prefix + self._format_item(item, labels, language, index).rstrip("-\n ")
+
     def _format_item(self, item: ContentItem, labels: dict, language: str, index: int) -> str:
         """Format a single ContentItem into Markdown."""
-        title = (
-            item.metadata.get(f"title_{language}")
-            or item.title
-        ).replace("[", "(").replace("]", ")")
+        _title = item.metadata.get(f"title_{language}") or item.title
+        title = str(_title).replace("[", "(").replace("]", ")")
         url = str(item.url)
         score = item.ai_score or "?"
         meta = item.metadata
@@ -147,9 +197,21 @@ class DailySummarizer:
         else:
             source_parts.append(item.author or "unknown")
         if item.published_at:
-            day = item.published_at.strftime("%d").lstrip("0")
-            source_parts.append(item.published_at.strftime(f"%b {day}, %H:%M"))
+            if language == "zh":
+                source_parts.append(
+                    f"{item.published_at.month}月{item.published_at.day}日 "
+                    f"{item.published_at:%H:%M}"
+                )
+            else:
+                day = item.published_at.strftime("%d").lstrip("0")
+                source_parts.append(item.published_at.strftime(f"%b {day}, %H:%M"))
         source_line = " \u00b7 ".join(source_parts)  # ·
+
+        discussion_url = meta.get("discussion_url")
+        if discussion_url:
+            discussion_url = str(discussion_url)
+            if discussion_url != url:
+                source_line += f' · [{labels["discussion"]}]({discussion_url})'
 
         lines = [
             f'<a id="item-{index}"></a>',
@@ -190,6 +252,6 @@ class DailySummarizer:
         """Generate summary when no high-scoring items were found."""
         return (
             f"# {labels['header']} - {date}\n\n"
-            f"> Analyzed {total_fetched} items, but none met the importance threshold.\n\n"
+            f"> {labels['empty_analyzed'].format(total=total_fetched)}\n\n"
             + labels["empty_body"]
         )

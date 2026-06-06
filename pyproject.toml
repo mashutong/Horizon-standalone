@@ -12,6 +12,7 @@ dependencies = [
     "openai>=1.54.0",
     "google-genai>=0.3.0",
     "pydantic>=2.9.0",
+    "python-dateutil>=2.9.0",
     "rich>=13.9.0",
     "tenacity>=9.0.0",
     "python-dotenv>=1.0.0",
@@ -27,10 +28,16 @@ dev = [
     "pytest-cov>=5.0.0",
     "pytest-asyncio>=0.24.0",
 ]
+openbb = [
+    "openbb>=4.4.0",
+    "openbb-benzinga>=1.6.0",
+]
 
 [project.scripts]
 horizon = "src.main:main"
 horizon-mcp = "src.mcp.server:main"
+horizon-wizard = "src.setup.wizard:main"
+horizon-webhook = "src.services.webhook_cli:main"
 
 [build-system]
 requires = ["hatchling"]

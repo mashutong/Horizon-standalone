@@ -24,6 +24,7 @@ from .horizon_adapter import (
     resolve_horizon_path,
 )
 from .run_store import RunStore
+from ..services.webhook import WebhookNotifier
 
 
 def _default_runs_root() -> Path:
@@ -188,6 +189,10 @@ class HorizonPipelineService:
                 if not os.getenv(pwd_key):
                     missing_env.append(pwd_key)
 
+            if getattr(ctx.config, "webhook", None) and ctx.config.webhook and ctx.config.webhook.enabled:
+                if ctx.config.webhook.url_env and not os.getenv(ctx.config.webhook.url_env):
+                    missing_env.append(ctx.config.webhook.url_env)
+
         return {
             "horizon_path": str(ctx.horizon_path),
             "config_path": str(ctx.config_path),
@@ -326,7 +331,7 @@ class HorizonPipelineService:
         if topic_dedup and important_items:
             storage = make_storage(ctx.runtime, ctx.config_path)
             orchestrator = make_orchestrator(ctx.runtime, ctx.config, storage)
-            important_items = orchestrator.merge_topic_duplicates(important_items)
+            important_items = await orchestrator.merge_topic_duplicates(important_items)
 
         self.run_store.save_items(run_id, "filtered", items_to_dicts(important_items))
         meta = self.run_store.update_meta(
@@ -598,3 +603,49 @@ class HorizonPipelineService:
             else:
                 buckets["9-10"] += 1
         return buckets
+
+    async def send_webhook(
+        self,
+        date: str,
+        language: str = "zh",
+        important_items: int = 0,
+        all_items: int = 0,
+        result: str = "success",
+        summary: str = "",
+        horizon_path: str | None = None,
+        config_path: str | None = None,
+    ) -> dict[str, Any]:
+        """Send a webhook notification using the configured webhook settings."""
+
+        ctx, _, _ = self._build_context(
+            horizon_path=horizon_path,
+            config_path=config_path,
+            sources=None,
+        )
+
+        webhook_config = ctx.config.webhook
+        if not webhook_config or not webhook_config.enabled:
+            return {
+                "sent": False,
+                "reason": "Webhook is not enabled in configuration.",
+            }
+
+        notifier = WebhookNotifier(webhook_config)
+        variables = {
+            "date": date,
+            "language": language,
+            "important_items": important_items,
+            "all_items": all_items,
+            "result": result,
+            "timestamp": str(int(datetime.now(timezone.utc).timestamp())),
+            "message_title": f"Horizon {date} webhook",
+            "message_kind": "manual",
+            "summary": summary,
+        }
+
+        await notifier.notify(variables)
+
+        return {
+            "sent": True,
+            "variables": {k: (v if k != "summary" else f"<{len(v)} chars>") for k, v in variables.items()},
+        }

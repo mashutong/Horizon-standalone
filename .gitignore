@@ -39,9 +39,13 @@ data/mcp-secrets.json
 com.shutong.horizon-daily.plist
 
 # Data files (keep structure, ignore content)
+data/config.json
 data/seen.json
 data/summaries/*.md
 data/subscribers.json
+data/mcp.secrets.json
+data/mcp-secrets.json
+data/mcp-runs/
 
 docs/_posts/*.md
 
@@ -57,3 +61,5 @@ logs/*.log
 
 # todo
 todo.txt
+.ruff_cache
+.pytest_cache

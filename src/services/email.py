@@ -1,12 +1,13 @@
 """Email service for handling subscriptions and sending summaries."""
 
-import imaplib
-import smtplib
 import email
-import os
+import html
+import imaplib
 import logging
-from email.mime.text import MIMEText
+import os
+import smtplib
 from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from email.utils import parseaddr
 from typing import List
 
@@ -15,6 +16,7 @@ try:
 except ImportError:
     markdown = None
 
+from ..ai.markdown_utils import clean_app_summary_markdown
 from ..models import EmailConfig
 
 logger = logging.getLogger(__name__)
@@ -29,11 +31,14 @@ class EmailManager:
         if console is None:
             try:
                 from rich.console import Console
+
                 self.console = Console()
             except ImportError:
+
                 class DummyConsole:
                     def print(self, *args, **kwargs):
                         print(*args, **kwargs)
+
                 self.console = DummyConsole()
         else:
             self.console = console
@@ -42,24 +47,21 @@ class EmailManager:
             logger.warning(
                 f"Environment variable {self.config.password_env} not set. Email features may fail."
             )
-            self.console.print(f"[yellow]Warning: Environment variable {self.config.password_env} not set. Email features may fail.[/yellow]")
-
+            self.console.print(
+                f"[yellow]Warning: Environment variable {self.config.password_env} not set. Email features may fail.[/yellow]"
+            )
 
     def check_subscriptions(self, storage_manager):
         """Checks inbox for subscription requests and updates subscriber list."""
-        if not self.config.enabled:
+        if not self.config.enabled or not self.config.imap_enabled:
             return
 
         try:
-            # Connect to IMAP
             mail = imaplib.IMAP4_SSL(self.config.imap_server, self.config.imap_port)
             mail.login(self.config.email_address, self.pwd)
             mail.select("INBOX")
 
-            # 1. Process Subscriptions
             keyword = self.config.subscribe_keyword
-            # We search ALL messages with SUBSCRIBE because sometimes clients
-            # (like your phone/web) mark incoming emails as read before the script catches them.
             search_crit = f'(UNSEEN SUBJECT "{keyword}")'
 
             status, messages = mail.search(None, search_crit)
@@ -69,7 +71,6 @@ class EmailManager:
                 subscribers = storage_manager.load_subscribers()
 
                 for e_id in email_ids:
-                    # Fetch the email
                     _, msg_data = mail.fetch(e_id, "(RFC822)")
                     for response_part in msg_data:
                         if isinstance(response_part, tuple):
@@ -84,12 +85,14 @@ class EmailManager:
                             if sender:
                                 _, email_addr = parseaddr(sender)
                                 if email_addr and "@" in email_addr:
-                                    if "noreply" in email_addr.lower() or "no-reply" in email_addr.lower():
+                                    if (
+                                        "noreply" in email_addr.lower()
+                                        or "no-reply" in email_addr.lower()
+                                    ):
                                         continue
 
                                     if email_addr not in subscribers:
                                         storage_manager.add_subscriber(email_addr)
-                                        # Reload list to keep it fresh
                                         subscribers = storage_manager.load_subscribers()
                                         self._send_reply(
                                             email_addr,
@@ -100,7 +103,6 @@ class EmailManager:
                                     else:
                                         logger.info(f"Already subscribed: {email_addr}")
 
-            # 2. Process Unsubscriptions
             unsub_keyword = self.config.unsubscribe_keyword
             search_crit_unsub = f'(UNSEEN SUBJECT "{unsub_keyword}")'
 
@@ -125,7 +127,10 @@ class EmailManager:
                             if sender:
                                 _, email_addr = parseaddr(sender)
                                 if email_addr and "@" in email_addr:
-                                    if "noreply" in email_addr.lower() or "no-reply" in email_addr.lower():
+                                    if (
+                                        "noreply" in email_addr.lower()
+                                        or "no-reply" in email_addr.lower()
+                                    ):
                                         continue
 
                                     if email_addr in subscribers:
@@ -146,20 +151,19 @@ class EmailManager:
         except Exception as e:
             logger.error(f"Error checking subscriptions: {e}")
 
-    def send_daily_summary(
-        self, summary_md: str, subject: str, subscribers: List[str]
-    ):
+    def send_daily_summary(self, summary_md: str, subject: str, subscribers: List[str]):
         """Sends the daily summary to all subscribers."""
         if not self.config.enabled or not subscribers:
             return
 
+        cleaned_summary = clean_app_summary_markdown(summary_md)
+        safe_summary = html.escape(cleaned_summary)
         html_content = (
-            markdown.markdown(summary_md)
+            markdown.markdown(safe_summary)
             if markdown
-            else f"<pre>{summary_md}</pre>"
+            else f"<pre>{safe_summary}</pre>"
         )
 
-        # Simple HTML wrapper for better presentation
         html_body = f"""
         <!DOCTYPE html>
         <html>
@@ -188,16 +192,19 @@ class EmailManager:
             with smtplib.SMTP_SSL(
                 self.config.smtp_server, self.config.smtp_port
             ) as server:
-                server.login(self.config.email_address, self.pwd)
+                server.login(
+                    self.config.smtp_username or self.config.email_address, self.pwd
+                )
 
                 for subscriber in subscribers:
                     msg = MIMEMultipart("alternative")
                     msg["Subject"] = subject
-                    msg["From"] = f"{self.config.sender_name} <{self.config.email_address}>"
+                    msg["From"] = (
+                        f"{self.config.sender_name} <{self.config.email_address}>"
+                    )
                     msg["To"] = subscriber
 
-                    # Create plain text and HTML versions
-                    text_part = MIMEText(summary_md, "plain")
+                    text_part = MIMEText(cleaned_summary, "plain")
                     html_part = MIMEText(html_body, "html")
 
                     msg.attach(text_part)
@@ -218,7 +225,9 @@ class EmailManager:
             with smtplib.SMTP_SSL(
                 self.config.smtp_server, self.config.smtp_port
             ) as server:
-                server.login(self.config.email_address, self.pwd)
+                server.login(
+                    self.config.smtp_username or self.config.email_address, self.pwd
+                )
 
                 msg = MIMEText(body)
                 msg["Subject"] = subject

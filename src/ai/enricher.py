@@ -5,6 +5,7 @@ For items that pass the score threshold, this module:
 2. Feeds search results + item content to AI to generate grounded background knowledge
 """
 
+import asyncio
 import json
 import re
 import sys
@@ -19,6 +20,7 @@ from .prompts import (
     CONCEPT_EXTRACTION_SYSTEM, CONCEPT_EXTRACTION_USER,
     CONTENT_ENRICHMENT_SYSTEM, CONTENT_ENRICHMENT_USER,
 )
+from .utils import parse_json_response
 from ..models import ContentItem
 
 
@@ -28,12 +30,30 @@ class ContentEnricher:
     def __init__(self, ai_client: AIClient):
         self.client = ai_client
 
+    def _get_concurrency(self) -> int:
+        """Return the configured enrichment concurrency, clamped to 1 or above."""
+        config = getattr(self.client, "config", None)
+        concurrency = getattr(config, "enrichment_concurrency", 1)
+        return max(concurrency, 1)
+
     async def enrich_batch(self, items: List[ContentItem]) -> None:
         """Enrich items in-place with background knowledge.
 
         Args:
             items: Content items to enrich (modified in-place)
         """
+        concurrency = self._get_concurrency()
+        semaphore = asyncio.Semaphore(concurrency)
+
+        async def _process(item: ContentItem, progress_task) -> None:
+            async with semaphore:
+                try:
+                    await self._enrich_item(item)
+                except Exception as e:
+                    print(f"Error enriching item {item.id}: {e}, falling back to translation")
+                    await self._translate_item(item)
+            progress.advance(progress_task)
+
         with Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
@@ -42,13 +62,10 @@ class ContentEnricher:
             transient=True,
         ) as progress:
             task = progress.add_task("Enriching", total=len(items))
-
-            for item in items:
-                try:
-                    await self._enrich_item(item)
-                except Exception as e:
-                    print(f"Error enriching item {item.id}: {e}")
-                progress.advance(task)
+            coros = [
+                _process(item, task) for item in items
+            ]
+            await asyncio.gather(*coros)
 
     async def _web_search(self, query: str, max_results: int = 3) -> list:
         """Search the web for context via DuckDuckGo.
@@ -62,7 +79,7 @@ class ContentEnricher:
             sys.stderr = open(os.devnull, "w")
             try:
                 ddgs = DDGS()
-                results = ddgs.text(query, max_results=max_results)
+                results = await asyncio.to_thread(ddgs.text, query, max_results=max_results)
             finally:
                 sys.stderr.close()
                 sys.stderr = stderr
@@ -80,54 +97,7 @@ class ContentEnricher:
 
         Returns the parsed dict, or None if all strategies fail.
         """
-        text = response.strip()
-
-        # Strategy 1: direct parse
-        try:
-            return json.loads(text)
-        except (json.JSONDecodeError, ValueError):
-            pass
-
-        # Strategy 2: extract from ```json ... ``` code block
-        if "```json" in text:
-            try:
-                json_str = text.split("```json")[1].split("```")[0].strip()
-                return json.loads(json_str)
-            except (json.JSONDecodeError, ValueError, IndexError):
-                pass
-
-        # Strategy 3: extract from ``` ... ``` code block
-        if "```" in text:
-            try:
-                json_str = text.split("```")[1].split("```")[0].strip()
-                return json.loads(json_str)
-            except (json.JSONDecodeError, ValueError, IndexError):
-                pass
-
-        # Strategy 4: find the first { ... } block using brace matching
-        start = text.find("{")
-        if start != -1:
-            depth = 0
-            for i in range(start, len(text)):
-                if text[i] == "{":
-                    depth += 1
-                elif text[i] == "}":
-                    depth -= 1
-                    if depth == 0:
-                        try:
-                            return json.loads(text[start : i + 1])
-                        except (json.JSONDecodeError, ValueError):
-                            break
-
-        # Strategy 5: regex extraction as last resort
-        match = re.search(r"\{[\s\S]*\}", text)
-        if match:
-            try:
-                return json.loads(match.group())
-            except (json.JSONDecodeError, ValueError):
-                pass
-
-        return None
+        return parse_json_response(response)
 
     async def _extract_concepts(self, item: ContentItem, content_text: str) -> List[str]:
         """Ask AI to identify concepts that need explanation.
@@ -150,7 +120,6 @@ class ContentEnricher:
             response = await self.client.complete(
                 system=CONCEPT_EXTRACTION_SYSTEM,
                 user=user_prompt,
-                temperature=0.3,
             )
             result = self._parse_json_response(response)
             if result is None:
@@ -219,21 +188,22 @@ class ContentEnricher:
         response = await self.client.complete(
             system=CONTENT_ENRICHMENT_SYSTEM,
             user=user_prompt,
-            temperature=0.4,
         )
 
         # Parse JSON response with robust fallback
         result = self._parse_json_response(response)
         if result is None:
-            # Gracefully degrade: skip enrichment instead of raising
-            # (raising would trigger retries that won't help with a parse error)
-            print(f"Warning: could not parse enrichment response for {item.id}, skipping enrichment")
+            # Gracefully degrade: fall back to a lightweight translation
+            # instead of dropping the item untranslated.
+            print(f"Warning: could not parse enrichment response for {item.id}, falling back to translation")
+            await self._translate_item(item)
             return
 
         # Combine structured sub-fields into per-language detailed_summary
         for lang in ("en", "zh"):
             if result.get(f"title_{lang}"):
-                item.metadata[f"title_{lang}"] = result[f"title_{lang}"]
+                val = result[f"title_{lang}"]
+                item.metadata[f"title_{lang}"] = val.get("text") or str(val) if isinstance(val, dict) else str(val)
 
             parts = []
             for field in ("whats_new", "why_it_matters", "key_details"):
@@ -244,10 +214,12 @@ class ContentEnricher:
                 item.metadata[f"detailed_summary_{lang}"] = " ".join(parts)
 
             if result.get(f"background_{lang}"):
-                item.metadata[f"background_{lang}"] = result[f"background_{lang}"]
+                val = result[f"background_{lang}"]
+                item.metadata[f"background_{lang}"] = val.get("text") or str(val) if isinstance(val, dict) else str(val)
 
             if result.get(f"community_discussion_{lang}"):
-                item.metadata[f"community_discussion_{lang}"] = result[f"community_discussion_{lang}"]
+                val = result[f"community_discussion_{lang}"]
+                item.metadata[f"community_discussion_{lang}"] = val.get("text") or str(val) if isinstance(val, dict) else str(val)
 
         # Store citation sources — only URLs that actually came from our search results
         if result.get("sources") and available_urls:
@@ -263,3 +235,25 @@ class ContentEnricher:
         item.metadata["detailed_summary"] = item.metadata.get("detailed_summary_en", "")
         item.metadata["background"] = item.metadata.get("background_en", "")
         item.metadata["community_discussion"] = item.metadata.get("community_discussion_en", "")
+
+    async def _translate_item(self, item: ContentItem) -> None:
+        """Lightweight translation fallback: when full enrichment fails, at least
+        translate the title and summary to Chinese so the item is not dropped."""
+        try:
+            response = await self.client.complete(
+                system="You are a translator. Translate to Simplified Chinese. Return only valid JSON, no other text.",
+                user=(
+                    f'Title: {item.title}\n'
+                    f'Summary: {item.ai_summary or item.title}\n\n'
+                    'Return JSON:\n'
+                    '{"title_zh": "<中文标题>", "summary_zh": "<用中文写1-2句摘要>"}'
+                ),
+            )
+            result = self._parse_json_response(response)
+            if result:
+                if result.get("title_zh"):
+                    item.metadata["title_zh"] = result["title_zh"]
+                if result.get("summary_zh"):
+                    item.metadata["detailed_summary_zh"] = result["summary_zh"]
+        except Exception:
+            pass
