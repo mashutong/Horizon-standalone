@@ -5,6 +5,7 @@ date: 2026-06-05
 lang: en
 ---
 
+{% raw %}
 > From 32 items, 18 important content pieces were selected
 
 ---
@@ -417,3 +418,4 @@ reddit · r/LocalLLaMA · SummarizedAnu · Jun 5, 10:21
 **Tags**: `#Gemma 4`, `#LM Studio`, `#LLM configuration`, `#benchmark`, `#local LLM`
 
 ---
+{% endraw %}
