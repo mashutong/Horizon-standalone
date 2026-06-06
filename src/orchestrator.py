@@ -165,8 +165,14 @@ class HorizonOrchestrator:
                         if len(parts) > 1:
                             summary_content = parts[1].strip()
 
+                    # Wrap the body in {% raw %} so AI content that quotes
+                    # Liquid-like syntax ({% ... %} / {{ ... }}, e.g. a Jinja
+                    # template snippet) does not break the Jekyll/Liquid build
+                    # on GitHub Pages and take the whole site down.
+                    body = "{% raw %}\n" + summary_content + "\n{% endraw %}\n"
+
                     with open(dest_path, "w", encoding="utf-8") as f:
-                        f.write(front_matter + summary_content)
+                        f.write(front_matter + body)
 
                     self.console.print(f"📄 Copied {lang.upper()} summary to GitHub Pages: {dest_path}\n")
                 except Exception as e:
