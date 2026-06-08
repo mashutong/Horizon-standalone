@@ -2,7 +2,7 @@ name: Daily Horizon Summary
 
 on:
   schedule:
-    - cron: '17 23 * * *'  # Daily at 23:17 UTC (07:17 Beijing), off-peak to avoid scheduling delays
+    - cron: '17 23 */2 * *'  # Every 2 days at 23:17 UTC (07:17 Beijing), off-peak to avoid scheduling delays
   workflow_dispatch:      # Allow manual trigger
 
 jobs:
@@ -33,7 +33,7 @@ jobs:
           REDDIT_CLIENT_ID: ${{ secrets.REDDIT_CLIENT_ID }}
           REDDIT_CLIENT_SECRET: ${{ secrets.REDDIT_CLIENT_SECRET }}
           REDDIT_USER_AGENT: ${{ secrets.REDDIT_USER_AGENT }}
-        run: uv run horizon --hours 26
+        run: uv run horizon --hours 50
 
       - name: Set current date as environment variable
         run: echo "DATE=$(TZ='Asia/Shanghai' date +'%Y-%m-%d')" >> $GITHUB_ENV
